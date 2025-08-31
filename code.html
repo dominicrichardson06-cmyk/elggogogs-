@@ -3,15 +3,15 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>LEGO 3D — Stud-Locked (Edge-Aligned Grid)</title>
+<title>LEGO 3D — Edge-Aligned Grid (1×1 cells)</title>
 <style>
   :root{ --bg:#f5f7fb; --fg:#0b1220; --card:#fff; --line:#e5e7eb; }
   html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
   #app{height:100%;display:grid;grid-template-columns:260px 1fr;grid-template-rows:50px 1fr;grid-template-areas:"topbar topbar" "sidebar main"}
-  header{grid-area:topbar;display:flex;gap:8px;align-items:center;padding:8px 12px;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.06); position:relative}
+  header{grid-area:topbar;display:flex;gap:8px;align-items:center;padding:8px 12px;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.06)}
   header .grow{flex:1}
   .btn{border:0;border-radius:10px;background:#0b1220;color:#fff;padding:6px 10px;font-weight:600;cursor:pointer}
-  .dd-wrap{position:relative;display:inline-block}
+  .dd{position:relative;display:inline-block}
   .menu{position:absolute;top:100%;right:0;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 28px rgba(0,0,0,.14);padding:8px;display:none;z-index:20;min-width:320px;max-height:70vh;overflow:auto}
   .menu.show{display:block}
   .sec{border:1px solid var(--line);border-radius:10px;margin:8px 0;background:#fafbfc}
@@ -30,7 +30,6 @@
   .kbd{background:#0b1220;color:#fff;border-radius:6px;padding:1px 6px;font-size:11px}
 </style>
 
-<!-- three.js via import map -->
 <script type="importmap">
 {
   "imports": {
@@ -43,22 +42,20 @@
 <body>
 <div id="app">
   <header>
-    <strong>LEGO 3D — Stud-Locked</strong>
+    <strong>LEGO 3D — Edge-Aligned Grid</strong>
     <div class="grow"></div>
 
-    <!-- Color dropdown -->
-    <div class="dd-wrap">
-      <button id="btnColor" class="btn" title="Choose material & color">
+    <div class="dd">
+      <button id="btnColor" class="btn">
         <span id="btnColorDot" class="dot" style="display:inline-block;vertical-align:middle;background:#0055BF"></span>
         <span id="btnColorLabel">Blue · Plastic</span> ▾
       </button>
-      <div id="menuColor" class="menu" role="menu" aria-label="Choose a color"></div>
+      <div id="menuColor" class="menu"></div>
     </div>
 
-    <!-- Parts dropdown -->
-    <div class="dd-wrap">
-      <button id="btnParts" class="btn" title="Choose part">Parts ▾</button>
-      <div id="menuParts" class="menu" role="menu" aria-label="Choose a part"></div>
+    <div class="dd">
+      <button id="btnParts" class="btn">Parts ▾</button>
+      <div id="menuParts" class="menu"></div>
     </div>
   </header>
 
@@ -67,7 +64,7 @@
       • Left-drag orbit · Right-drag pan · Wheel zoom<br/>
       • Pick a <b>Color</b> then <b>Part</b><br/>
       • <b class="kbd">R</b> rotate ghost · click to drop (keeps placing) · <b class="kbd">Esc</b> cancel<br/>
-      • Click a placed part to select (blue outline) · <b class="kbd">Delete</b> removes<br/>
+      • Click a part to select (blue outline) · <b class="kbd">Delete</b> removes<br/>
       • Grid squares are exactly 1×1 studs; bold line every 8 studs
     </div>
   </aside>
@@ -86,7 +83,6 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 
 /* ===== constants ===== */
 const STUD_PITCH=8, PLATE_HEIGHT=3.2, BRICK_HEIGHT=9.6, BASE_STUDS=48;
-/* top studs sizing — change STUD_HEIGHT to tweak nub height */
 const STUD_DIAMETER=4.8, STUD_RADIUS=STUD_DIAMETER/2, STUD_HEIGHT=1.6;
 const EPS = 0.001;
 
@@ -105,8 +101,8 @@ controls.enableDamping=true; controls.dampingFactor=.07;
 scene.add(new THREE.HemisphereLight(0xffffff,0xb0b8c2,0.9));
 const sun=new THREE.DirectionalLight(0xffffff,1.0); sun.position.set(300,420,250); scene.add(sun);
 
-/* simple bright room (helps transparent materials) */
-(function addRoom(){
+/* light room (for glass) */
+(() => {
   const room = new THREE.Mesh(
     new THREE.BoxGeometry(2000,1200,2000),
     new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.BackSide })
@@ -123,22 +119,19 @@ const plate=new THREE.Mesh(
 );
 plate.position.y=PLATE_HEIGHT/2; baseplate.add(plate);
 
-/* ===== edge-aligned floor grid (each square = 1×1 stud) ===== */
+/* ===== edge-aligned floor grid: each square = 1×1 stud; majors every 8 ===== */
 function makeStudEdgeGrid(studs, pitch, minorColor=0xe3e7ee, majorColor=0x94a3b8, majorEvery=8){
   const half = (studs * pitch) / 2;
   const minorVerts = [];
   const majorVerts = [];
   for(let j=0; j<=studs; j++){
     const p = -half + j*pitch;
-    const isMajor = (j % majorEvery === 0);
-    const tgt = isMajor ? majorVerts : minorVerts;
-    // vertical line at x = p
-    tgt.push(p, 0, -half,  p, 0, half);
-    // horizontal line at z = p
-    tgt.push(-half, 0, p,  half, 0, p);
+    const tgt = (j % majorEvery === 0) ? majorVerts : minorVerts;
+    // x = p (vertical), z = p (horizontal)
+    tgt.push(p,0,-half, p,0, half);
+    tgt.push(-half,0,p, half,0, p);
   }
   const group = new THREE.Group();
-
   if(minorVerts.length){
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(minorVerts,3));
@@ -150,7 +143,7 @@ function makeStudEdgeGrid(studs, pitch, minorColor=0xe3e7ee, majorColor=0x94a3b8
     const g2 = new THREE.BufferGeometry();
     g2.setAttribute('position', new THREE.Float32BufferAttribute(majorVerts,3));
     const lines2 = new THREE.LineSegments(g2, new THREE.LineBasicMaterial({ color: majorColor }));
-    lines2.position.y = PLATE_HEIGHT + 0.02; // slight lift so they read as “thicker”
+    lines2.position.y = PLATE_HEIGHT + 0.02;
     group.add(lines2);
   }
   return group;
@@ -163,7 +156,7 @@ pickPlane.rotateX(-Math.PI/2); pickPlane.position.y=PLATE_HEIGHT; scene.add(pick
 
 const modelRoot=new THREE.Group(); scene.add(modelRoot);
 
-/* ===== parts catalog (sections) ===== */
+/* ===== catalog (grouped) ===== */
 const SECTIONS = [
   { title: 'Brick › 1× Brick', items: [
     { id:'3005', name:'1×1', studs:[1,1], height:BRICK_HEIGHT },
@@ -185,93 +178,40 @@ const SECTIONS = [
     { id:'3007', name:'2×8', studs:[2,8], height:BRICK_HEIGHT },
     { id:'3006', name:'2×10', studs:[2,10], height:BRICK_HEIGHT }
   ]},
-  { title: 'Brick › Tall Brick', items: [
-    { id:'14716', name:'1×1×3', studs:[1,1], height:BRICK_HEIGHT*3 },
-    { id:'2453',  name:'1×1×5', studs:[1,1], height:BRICK_HEIGHT*5 },
-    { id:'3245',  name:'1×2×2', studs:[1,2], height:BRICK_HEIGHT*2 },
-    { id:'22886', name:'1×2×3', studs:[1,2], height:BRICK_HEIGHT*3 },
-    { id:'2454',  name:'1×2×5', studs:[1,2], height:BRICK_HEIGHT*5 },
-    { id:'30145', name:'2×2×3', studs:[2,2], height:BRICK_HEIGHT*3 },
-    { id:'49311', name:'1×4×3', studs:[1,4], height:BRICK_HEIGHT*3 }
-  ]},
-  { title: 'Brick › Hollow Brick (see-through)', items: [
-    { id:'3065',  name:'1×2 Hollow',   studs:[1,2], height:BRICK_HEIGHT,  hollow:true },
-    { id:'46212', name:'1×2×5 Hollow', studs:[1,2], height:BRICK_HEIGHT*5, hollow:true },
-    { id:'3066',  name:'1×4 Hollow',   studs:[1,4], height:BRICK_HEIGHT,  hollow:true }
-  ]},
   { title: 'Plate › 1× Plate', items: [
     { id:'3024', name:'1×1', studs:[1,1], height:PLATE_HEIGHT },
     { id:'3623', name:'1×3', studs:[1,3], height:PLATE_HEIGHT },
     { id:'3710', name:'1×4', studs:[1,4], height:PLATE_HEIGHT },
-    { id:'78329',name:'1×5', studs:[1,5], height:PLATE_HEIGHT },
     { id:'3666', name:'1×6', studs:[1,6], height:PLATE_HEIGHT },
     { id:'3460', name:'1×8', studs:[1,8], height:PLATE_HEIGHT },
     { id:'4477', name:'1×10', studs:[1,10], height:PLATE_HEIGHT },
     { id:'60479',name:'1×12', studs:[1,12], height:PLATE_HEIGHT },
-    { id:'2420', name:'2×2 Corner', studs:[2,2], height:PLATE_HEIGHT, mask:'corner' },
-    { id:'77844',name:'3×3 Corner', studs:[3,3], height:PLATE_HEIGHT, mask:'corner' },
-    { id:'15397',name:'3×3 Cross',  studs:[3,3], height:PLATE_HEIGHT, mask:'cross' },
-    { id:'73831',name:'2×3 w/ Cutout', studs:[2,3], height:PLATE_HEIGHT, mask:'cutout_corner' },
-    { id:'64799',name:'4×4 w/ Cutout', studs:[4,4], height:PLATE_HEIGHT, mask:'cutout_center_2x2' }
+    { id:'2420', name:'2×2 Corner', studs:[2,2], height:PLATE_HEIGHT, mask:'corner' }
   ]},
   { title: 'Plate › 2× Plate', items: [
     { id:'3022', name:'2×2', studs:[2,2], height:PLATE_HEIGHT },
     { id:'3021', name:'2×3', studs:[2,3], height:PLATE_HEIGHT },
     { id:'3020', name:'2×4', studs:[2,4], height:PLATE_HEIGHT },
     { id:'3795', name:'2×6', studs:[2,6], height:PLATE_HEIGHT },
-    { id:'3034', name:'2×8', studs:[2,8], height:PLATE_HEIGHT },
-    { id:'3832', name:'2×10', studs:[2,10], height:PLATE_HEIGHT },
-    { id:'2445', name:'2×12', studs:[2,12], height:PLATE_HEIGHT },
-    { id:'91988',name:'2×14', studs:[2,14], height:PLATE_HEIGHT },
-    { id:'4282', name:'2×16', studs:[2,16], height:PLATE_HEIGHT },
-    { id:'2639', name:'4×4 Corner', studs:[4,4], height:PLATE_HEIGHT, mask:'corner' }
+    { id:'3034', name:'2×8', studs:[2,8], height:PLATE_HEIGHT }
   ]},
-  { title: 'Plate › Large Plate', items: [
-    { id:'11212',name:'3×3', studs:[3,3], height:PLATE_HEIGHT },
-    { id:'3031', name:'4×4', studs:[4,4], height:PLATE_HEIGHT },
-    { id:'3032', name:'4×6', studs:[4,6], height:PLATE_HEIGHT },
-    { id:'3035', name:'4×8', studs:[4,8], height:PLATE_HEIGHT },
-    { id:'3030', name:'4×10', studs:[4,10], height:PLATE_HEIGHT },
-    { id:'3029', name:'4×12', studs:[4,12], height:PLATE_HEIGHT },
-    { id:'3958', name:'6×6', studs:[6,6], height:PLATE_HEIGHT },
-    { id:'3036', name:'6×8', studs:[6,8], height:PLATE_HEIGHT },
-    { id:'3033', name:'6×10', studs:[6,10], height:PLATE_HEIGHT },
-    { id:'3028', name:'6×12', studs:[6,12], height:PLATE_HEIGHT },
-    { id:'3456', name:'6×14', studs:[6,14], height:PLATE_HEIGHT },
-    { id:'3027', name:'6×16', studs:[6,16], height:PLATE_HEIGHT },
-    { id:'41539',name:'8×8', studs:[8,8], height:PLATE_HEIGHT },
-    { id:'92438',name:'8×16', studs:[8,16], height:PLATE_HEIGHT },
-    { id:'plate_16x16', name:'16×16', studs:[16,16], height:PLATE_HEIGHT }
-  ]},
-  /* Tiles (no studs) */
-  { title: 'Tile › 1× Tile', items: [
+  { title: 'Tile', items: [
     { id:'3070',  name:'1×1 Tile', studs:[1,1], height:PLATE_HEIGHT, tile:true },
     { id:'3069',  name:'1×2 Tile', studs:[1,2], height:PLATE_HEIGHT, tile:true },
-    { id:'63864', name:'1×3 Tile', studs:[1,3], height:PLATE_HEIGHT, tile:true },
-    { id:'2431',  name:'1×4 Tile', studs:[1,4], height:PLATE_HEIGHT, tile:true },
-    { id:'6636',  name:'1×6 Tile', studs:[1,6], height:PLATE_HEIGHT, tile:true },
-    { id:'4162',  name:'1×8 Tile', studs:[1,8], height:PLATE_HEIGHT, tile:true },
-    { id:'14719', name:'2×2 Tile, Corner', studs:[2,2], height:PLATE_HEIGHT, tile:true, mask:'corner' }
-  ]},
-  { title: 'Tile › 2× Tile', items: [
     { id:'3068',  name:'2×2 Tile', studs:[2,2], height:PLATE_HEIGHT, tile:true },
-    { id:'26603', name:'2×3 Tile', studs:[2,3], height:PLATE_HEIGHT, tile:true },
-    { id:'87079', name:'2×4 Tile', studs:[2,4], height:PLATE_HEIGHT, tile:true },
-    { id:'69729', name:'2×6 Tile', studs:[2,6], height:PLATE_HEIGHT, tile:true }
+    { id:'87079', name:'2×4 Tile', studs:[2,4], height:PLATE_HEIGHT, tile:true }
   ]},
-  { title: 'Tile › Large Tile', items: [
-    { id:'1751N', name:'4×4 Tile', studs:[4,4], height:PLATE_HEIGHT, tile:true },
-    { id:'10202', name:'6×6 Tile', studs:[6,6], height:PLATE_HEIGHT, tile:true },
-    { id:'tile_8x16', name:'8×16 Tile', studs:[8,16], height:PLATE_HEIGHT, tile:true }
+  { title: 'Hollow Brick (see-through)', items: [
+    { id:'3065',  name:'1×2 Hollow',   studs:[1,2], height:BRICK_HEIGHT, hollow:true },
+    { id:'46212', name:'1×2×5 Hollow', studs:[1,2], height:BRICK_HEIGHT*5, hollow:true }
   ]}
 ];
-
 const CATALOG={};
 for(const sec of SECTIONS) for(const it of sec.items){
   CATALOG[it.id] = { id:it.id, name:it.name, studs:it.studs, height:it.height, mask:it.mask||'rect', hollow:!!it.hollow, tile:!!it.tile };
 }
 
-/* ===== colors dropdown ===== */
+/* ===== color sets ===== */
 const COLOR_SETS = [
   { title:'Plastic (Opaque)', glass:false, items:[
     {name:'White',  hex:0xFFFFFF},
@@ -281,19 +221,17 @@ const COLOR_SETS = [
     {name:'Green',  hex:0x237841},
     {name:'Yellow', hex:0xF2CD37},
     {name:'LBG',    hex:0xA0A5A9},
-    {name:'DBG',    hex:0x6D6E5C},
-    {name:'Tan',    hex:0xD2B48C}
+    {name:'DBG',    hex:0x6D6E5C}
   ]},
   { title:'Glass (Transparent)', glass:true, items:[
     {name:'Trans-Clear',  hex:0xFFFFFF},
-    {name:'Trans-Red',    hex:0xFF3B3B},
-    {name:'Trans-Green',  hex:0x37FF8B},
     {name:'Trans-Blue',   hex:0x3BC5FF},
+    {name:'Trans-Red',    hex:0xFF3B3B},
     {name:'Trans-Yellow', hex:0xFFF85A}
   ]}
 ];
-
 let currentColor = { name:'Blue', hex:0x0055BF, glass:false };
+
 const btnColor = document.getElementById('btnColor');
 const menuColor = document.getElementById('menuColor');
 const btnColorDot = document.getElementById('btnColorDot');
@@ -315,12 +253,8 @@ function renderColorMenu(){
     const body=document.createElement('div'); body.className='body';
     set.items.forEach(it=>{
       const b=document.createElement('button'); b.className='item';
-      const sw=document.createElement('span');
       const dot=document.createElement('span'); dot.className='dot'; dot.style.background='#'+it.hex.toString(16).padStart(6,'0');
-      const label=document.createElement('span'); label.textContent=it.name;
-      sw.style.display='inline-flex'; sw.style.alignItems='center'; sw.style.gap='8px';
-      sw.appendChild(dot); sw.appendChild(label);
-      b.appendChild(sw);
+      b.appendChild(dot); b.appendChild(document.createTextNode(' '+it.name));
       b.addEventListener('click', ()=>{
         currentColor = { name: it.name, hex: it.hex, glass: set.glass };
         btnColorDot.style.background = '#'+it.hex.toString(16).padStart(6,'0');
@@ -352,7 +286,7 @@ function renderColorMenu(){
 }
 renderColorMenu();
 
-/* ===== parts dropdown ===== */
+/* parts dropdown */
 const btnParts = document.getElementById('btnParts');
 const menuParts = document.getElementById('menuParts');
 btnParts.addEventListener('click', (e)=>{ e.stopPropagation(); menuParts.classList.toggle('show'); });
@@ -373,7 +307,7 @@ function renderPartsMenu(){
       const b=document.createElement('button');
       b.className='item';
       b.innerHTML=`${it.name} <small>${it.id}</small>`;
-      b.addEventListener('click', ()=>{ startPlacing(it.id); });
+      b.addEventListener('click', ()=> startPlacing(it.id));
       body.appendChild(b);
     });
 
@@ -391,9 +325,9 @@ function renderPartsMenu(){
 }
 renderPartsMenu();
 
-/* close menus when clicking outside */
+/* close menus on outside click */
 document.addEventListener('click', (e)=>{
-  if (!e.target.closest('.dd-wrap')) {
+  if (!e.target.closest('.dd')) {
     menuParts.classList.remove('show');
     menuColor.classList.remove('show');
   }
@@ -431,18 +365,10 @@ function makeMaterialFor(part, colorSel, opts={}){
   return base(colorSel?.hex ?? 0x0055BF, { ghost: !!opts.ghost, hollow: part.hollow, glass: colorSel?.glass });
 }
 
-/* ===== masks & geometry ===== */
+/* ===== geometry helpers ===== */
 function buildMask(sx, sz, mode){
   const mask = Array.from({length:sz}, ()=> Array(sx).fill(true));
-  if(mode==='corner'){
-    for(let z=0; z<sz; z++) for(let x=0; x<sx; x++){ mask[z][x] = (x===0 || z===0); }
-  }else if(mode==='cross' && sx===3 && sz===3){
-    for(let z=0; z<3; z++) for(let x=0; x<3; x++){ mask[z][x] = (x===1 || z===1); }
-  }else if(mode==='cutout_center_2x2' && sx===4 && sz===4){
-    for(let z=1; z<=2; z++) for(let x=1; x<=2; x++){ mask[z][x] = false; }
-  }else if(mode==='cutout_corner'){
-    mask[sz-1][sx-1] = false; // remove one corner cell (L shape)
-  }
+  if(mode==='corner'){ for(let z=0; z<sz; z++) for(let x=0; x<sx; x++){ mask[z][x] = (x===0 || z===0); } }
   return mask;
 }
 function makeBodyGeometryRect(sx, sz, h){
@@ -462,6 +388,7 @@ function makeBodyGeometryMasked(sx, sz, h, mask){
   return merged || new THREE.BoxGeometry(STUD_PITCH,h,STUD_PITCH);
 }
 function addDomedStuds(body, sx, sz, h, mat, mask){
+  if(body.userData?.tile) return;
   const positions=[];
   for(let z=0; z<sz; z++) for(let x=0; x<sx; x++){ if(!mask || mask[z][x]) positions.push([(x-(sx-1)/2)*STUD_PITCH,(h/2),(z-(sz-1)/2)*STUD_PITCH]); }
   if(!positions.length) return;
@@ -490,13 +417,13 @@ function makePartMesh(partId, colorSel, opts={}){
   const mat = makeMaterialFor(p, currentColor, { ghost: !!opts.ghost });
   const geo = (p.mask!=='rect') ? makeBodyGeometryMasked(sx,sz,h,mask) : makeBodyGeometryRect(sx,sz,h);
   const body = new THREE.Mesh(geo, mat);
-  body.userData = { id: p.id, studsX:sx, studsZ:sz, height:h, maskType:p.mask, tile:p.tile===true };
-  if (!p.tile) addDomedStuds(body, sx, sz, h, mat, mask);  // tiles: no studs
+  body.userData = { id: p.id, studsX:sx, studsZ:sz, height:h, maskType:p.mask, tile:p.tile===true, hollow:p.hollow===true };
+  addDomedStuds(body, sx, sz, h, mat, mask);
   body.geometry.computeBoundingBox();
   return body;
 }
 
-/* ===== selection (outline) ===== */
+/* ===== selection ===== */
 let selected=null, outline=null;
 const outlineMat = new THREE.LineBasicMaterial({ color: 0x2563EB });
 function clearSelection(){
@@ -512,22 +439,18 @@ function selectMesh(m){
 }
 function syncOutline(){ if(!selected||!outline) return; outline.position.copy(selected.position); outline.rotation.copy(selected.rotation); }
 
-/* ===== placement: stud-locked ===== */
+/* ===== placement: snap edges to grid lines ===== */
 const ray=new THREE.Raycaster(); const mouse=new THREE.Vector2();
 let ghost=null, sourceKey=null, quarterTurns=0;
 const hint=document.getElementById('hint');
 
-const roundStud = v => Math.round(v/STUD_PITCH)*STUD_PITCH;
+const snapEdge = v => Math.round(v / STUD_PITCH) * STUD_PITCH;
 
-function anchorOffset(sx, sz, turns){
-  const ox = -((sx-1)/2)*STUD_PITCH;
-  const oz = -((sz-1)/2)*STUD_PITCH;
-  const t = (turns & 3);
-  if(t===0) return new THREE.Vector2(ox, oz);
-  if(t===1) return new THREE.Vector2(-oz, ox);
-  if(t===2) return new THREE.Vector2(-ox, -oz);
-  return new THREE.Vector2(oz, -ox);
+/* returns oriented stud size after rotation (so we snap the correct edges) */
+function orientedStuds(turns, sx, sz){
+  return (turns & 1) ? { sx: sz, sz: sx } : { sx, sz };
 }
+
 function bodyBoxWorld(mesh){
   mesh.updateWorldMatrix(true,false);
   const bb = mesh.geometry.boundingBox || (mesh.geometry.computeBoundingBox(), mesh.geometry.boundingBox);
@@ -578,29 +501,33 @@ window.addEventListener('mousemove',(e)=>{
   ray.setFromCamera(mouse,camera);
   if(!ghost) return;
 
-  const sx = ghost.userData.studsX, sz = ghost.userData.studsZ, h=ghost.userData.height;
-  const off = anchorOffset(sx, sz, quarterTurns);
+  const baseSX = ghost.userData.studsX, baseSZ = ghost.userData.studsZ, h=ghost.userData.height;
+  const { sx: oSX, sz: oSZ } = orientedStuds(quarterTurns, baseSX, baseSZ);
+  const halfX = (oSX * STUD_PITCH)/2;
+  const halfZ = (oSZ * STUD_PITCH)/2;
 
   let cx=0, cz=0, cy=0;
 
+  // stack on top surfaces
   const hits=ray.intersectObjects(modelRoot.children,true);
   if(hits.length){
     let m = hits[0].object; while(m && (!m.isMesh || !m.userData?.height)) m = m.parent;
     if(m){
-      const hit = hits[0].point;
-      const studX = roundStud(hit.x);
-      const studZ = roundStud(hit.z);
-      const bbTop = bodyBoxWorld(m).max.y;
-      cx = studX - off.x; cz = studZ - off.y; cy = bbTop + h/2 + EPS;
+      const p = hits[0].point;
+      // snap LEFT and FRONT edges to nearest grid, then restore center
+      cx = snapEdge(p.x - halfX) + halfX;
+      cz = snapEdge(p.z - halfZ) + halfZ;
+      cy = bodyBoxWorld(m).max.y + h/2 + EPS;
     }
   }
 
+  // baseplate snap
   if(cy===0){
-    const ground=ray.intersectObject(pickPlane,false)[0];
-    if(ground){
-      const studX = roundStud(ground.point.x);
-      const studZ = roundStud(ground.point.z);
-      cx = studX - off.x; cz = studZ - off.y; cy = PLATE_HEIGHT + h/2;
+    const g=ray.intersectObject(pickPlane,false)[0];
+    if(g){
+      cx = snapEdge(g.point.x - halfX) + halfX;
+      cz = snapEdge(g.point.z - halfZ) + halfZ;
+      cy = PLATE_HEIGHT + h/2;
     } else { return; }
   }
 
@@ -611,32 +538,22 @@ window.addEventListener('mousemove',(e)=>{
 
 window.addEventListener('keydown',(e)=>{
   if(e.key.toLowerCase()==='r' && ghost){ quarterTurns=(quarterTurns+1)&3; }
-  if(e.key==='Escape'){
-    menuParts.classList.remove('show');
-    menuColor.classList.remove('show');
-    cancelPlacing();
-  }
-  if((e.key==='Delete'||e.key==='Backspace') && selected){
-    modelRoot.remove(selected); clearSelection();
-  }
+  if(e.key==='Escape'){ menuParts.classList.remove('show'); menuColor.classList.remove('show'); cancelPlacing(); }
+  if((e.key==='Delete'||e.key==='Backspace') && selected){ modelRoot.remove(selected); clearSelection(); }
 });
 
 window.addEventListener('mousedown',(e)=>{
-  // placing: keep ghost for rapid placement
+  // place (keep ghost active)
   if(ghost && e.button===0){
     if(!collides(ghost)){
       const real=makePartMesh(sourceKey, currentColor);
-      const sx=real.userData.studsX, sz=real.userData.studsZ, off=anchorOffset(sx,sz,quarterTurns);
-      const centerX = roundStud(ghost.position.x + off.x) - off.x;
-      const centerZ = roundStud(ghost.position.z + off.y) - off.y;
-      real.position.set(centerX, ghost.position.y, centerZ);
+      real.position.copy(ghost.position);
       real.rotation.copy(ghost.rotation);
       modelRoot.add(real);
     }
     return;
   }
-
-  // selection
+  // select
   if(!ghost && e.button===0){
     const rect=renderer.domElement.getBoundingClientRect();
     const x=((e.clientX-rect.left)/rect.width)*2-1, y=-((e.clientY-rect.top)/rect.height)*2+1;
@@ -645,9 +562,7 @@ window.addEventListener('mousedown',(e)=>{
     if(hits.length){
       let m=hits[0].object; while(m && !m.userData?.id) m=m.parent;
       if(m) selectMesh(m);
-    } else {
-      clearSelection();
-    }
+    } else clearSelection();
   }
 });
 
