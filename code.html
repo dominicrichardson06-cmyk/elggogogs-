@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>LEGO 3D — Stud-Locked (Floor Grid + Majors)</title>
+<title>LEGO 3D — Stud-Locked (Edge-Aligned Grid)</title>
 <style>
   :root{ --bg:#f5f7fb; --fg:#0b1220; --card:#fff; --line:#e5e7eb; }
   html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
@@ -68,7 +68,7 @@
       • Pick a <b>Color</b> then <b>Part</b><br/>
       • <b class="kbd">R</b> rotate ghost · click to drop (keeps placing) · <b class="kbd">Esc</b> cancel<br/>
       • Click a placed part to select (blue outline) · <b class="kbd">Delete</b> removes<br/>
-      • Stud grid enforced — every 8 studs has a thicker major line
+      • Grid squares are exactly 1×1 studs; bold line every 8 studs
     </div>
   </aside>
 
@@ -86,7 +86,7 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 
 /* ===== constants ===== */
 const STUD_PITCH=8, PLATE_HEIGHT=3.2, BRICK_HEIGHT=9.6, BASE_STUDS=48;
-/* top studs (“nubs”) sizing — change STUD_HEIGHT to tweak stud height */
+/* top studs sizing — change STUD_HEIGHT to tweak nub height */
 const STUD_DIAMETER=4.8, STUD_RADIUS=STUD_DIAMETER/2, STUD_HEIGHT=1.6;
 const EPS = 0.001;
 
@@ -105,7 +105,7 @@ controls.enableDamping=true; controls.dampingFactor=.07;
 scene.add(new THREE.HemisphereLight(0xffffff,0xb0b8c2,0.9));
 const sun=new THREE.DirectionalLight(0xffffff,1.0); sun.position.set(300,420,250); scene.add(sun);
 
-/* simple bright room (helps glass look glassy) */
+/* simple bright room (helps transparent materials) */
 (function addRoom(){
   const room = new THREE.Mesh(
     new THREE.BoxGeometry(2000,1200,2000),
@@ -123,34 +123,39 @@ const plate=new THREE.Mesh(
 );
 plate.position.y=PLATE_HEIGHT/2; baseplate.add(plate);
 
-/* ===== floor grid aligned to studs, plus thicker majors every 8 ===== */
-const gridSize   = BASE_STUDS * STUD_PITCH;
-const divisions  = BASE_STUDS;
+/* ===== edge-aligned floor grid (each square = 1×1 stud) ===== */
+function makeStudEdgeGrid(studs, pitch, minorColor=0xe3e7ee, majorColor=0x94a3b8, majorEvery=8){
+  const half = (studs * pitch) / 2;
+  const minorVerts = [];
+  const majorVerts = [];
+  for(let j=0; j<=studs; j++){
+    const p = -half + j*pitch;
+    const isMajor = (j % majorEvery === 0);
+    const tgt = isMajor ? majorVerts : minorVerts;
+    // vertical line at x = p
+    tgt.push(p, 0, -half,  p, 0, half);
+    // horizontal line at z = p
+    tgt.push(-half, 0, p,  half, 0, p);
+  }
+  const group = new THREE.Group();
 
-// minor grid (one cell per stud)
-const minor = new THREE.GridHelper(
-  gridSize,
-  divisions,
-  0x4b5563, // darker “center” lines
-  0xe3e7ee  // lighter minor lines
-);
-minor.rotation.x = 0;
-minor.position.y = PLATE_HEIGHT + 0.01;
-baseplate.add(minor);
-
-// major grid overlay (every 8 studs)
-const majorEvery = 8;
-if (BASE_STUDS % majorEvery === 0) {
-  const majors = new THREE.GridHelper(
-    gridSize,
-    BASE_STUDS / majorEvery, // places a line every 8 studs
-    0x94a3b8, // major line color
-    0x94a3b8
-  );
-  majors.rotation.x = 0;
-  majors.position.y = PLATE_HEIGHT + 0.02; // tiny lift to avoid z-fighting
-  baseplate.add(majors);
+  if(minorVerts.length){
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(minorVerts,3));
+    const lines = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: minorColor }));
+    lines.position.y = PLATE_HEIGHT + 0.01;
+    group.add(lines);
+  }
+  if(majorVerts.length){
+    const g2 = new THREE.BufferGeometry();
+    g2.setAttribute('position', new THREE.Float32BufferAttribute(majorVerts,3));
+    const lines2 = new THREE.LineSegments(g2, new THREE.LineBasicMaterial({ color: majorColor }));
+    lines2.position.y = PLATE_HEIGHT + 0.02; // slight lift so they read as “thicker”
+    group.add(lines2);
+  }
+  return group;
 }
+baseplate.add(makeStudEdgeGrid(BASE_STUDS, STUD_PITCH));
 
 /* picking plane at top of baseplate */
 const pickPlane=new THREE.Mesh(new THREE.PlaneGeometry(4000,4000),new THREE.MeshBasicMaterial({visible:false}));
@@ -652,4 +657,3 @@ renderer.setAnimationLoop(()=>{ controls.update(); resize(); renderer.render(sce
 </script>
 </body>
 </html>
-
