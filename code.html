@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>LEGO 3D — Edge-Aligned Grid (1×1 cells)</title>
+<title>LEGO 3D — Edge-Aligned Grid + Save/Load</title>
 <style>
   :root{ --bg:#f5f7fb; --fg:#0b1220; --card:#fff; --line:#e5e7eb; }
   html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
@@ -26,7 +26,7 @@
   #main{grid-area:main;position:relative}
   #c{width:100%;height:100%;display:block}
   .hint{position:absolute;left:12px;top:12px;background:rgba(0,0,0,.7);color:#fff;padding:6px 10px;border-radius:8px;font-size:12px;display:none;z-index:2}
-  .dot{width:16px;height:16px;border-radius:50%;border:1px solid #cbd5e1}
+  .dot{width:16px;height:16px;border-radius:50%;border:1px solid #cbd5e1;display:inline-block;vertical-align:middle}
   .kbd{background:#0b1220;color:#fff;border-radius:6px;padding:1px 6px;font-size:11px}
 </style>
 
@@ -47,24 +47,28 @@
 
     <div class="dd">
       <button id="btnColor" class="btn">
-        <span id="btnColorDot" class="dot" style="display:inline-block;vertical-align:middle;background:#0055BF"></span>
+        <span id="btnColorDot" class="dot" style="background:#0055BF"></span>
         <span id="btnColorLabel">Blue · Plastic</span> ▾
       </button>
-      <div id="menuColor" class="menu"></div>
+      <div id="menuColor" class="menu" aria-label="Choose a color"></div>
     </div>
 
     <div class="dd">
       <button id="btnParts" class="btn">Parts ▾</button>
-      <div id="menuParts" class="menu"></div>
+      <div id="menuParts" class="menu" aria-label="Choose a part"></div>
     </div>
+
+    <button id="btnSave" class="btn" title="Download build as JSON">Save</button>
+    <input id="fileIn" type="file" accept="application/json" hidden />
+    <button id="btnLoad" class="btn" title="Open a JSON build file">Load</button>
   </header>
 
   <aside id="sidebar">
     <div class="card" style="font-size:12px;color:#6b7280;line-height:1.5">
       • Left-drag orbit · Right-drag pan · Wheel zoom<br/>
       • Pick a <b>Color</b> then <b>Part</b><br/>
-      • <b class="kbd">R</b> rotate ghost · click to drop (keeps placing) · <b class="kbd">Esc</b> cancel<br/>
-      • Click a part to select (blue outline) · <b class="kbd">Delete</b> removes<br/>
+      • <span class="kbd">R</span> rotate ghost · click to drop (keeps placing) · <span class="kbd">Esc</span> cancel<br/>
+      • Click a part to select (blue outline) · <span class="kbd">Delete</span> removes<br/>
       • Grid squares are exactly 1×1 studs; bold line every 8 studs
     </div>
   </aside>
@@ -101,8 +105,8 @@ controls.enableDamping=true; controls.dampingFactor=.07;
 scene.add(new THREE.HemisphereLight(0xffffff,0xb0b8c2,0.9));
 const sun=new THREE.DirectionalLight(0xffffff,1.0); sun.position.set(300,420,250); scene.add(sun);
 
-/* light room (for glass) */
-(() => {
+/* bright room (helps glass readability) */
+(function addRoom(){
   const room = new THREE.Mesh(
     new THREE.BoxGeometry(2000,1200,2000),
     new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.BackSide })
@@ -119,7 +123,7 @@ const plate=new THREE.Mesh(
 );
 plate.position.y=PLATE_HEIGHT/2; baseplate.add(plate);
 
-/* ===== edge-aligned floor grid: each square = 1×1 stud; majors every 8 ===== */
+/* ===== edge-aligned floor grid (1×1 cells; bold every 8) ===== */
 function makeStudEdgeGrid(studs, pitch, minorColor=0xe3e7ee, majorColor=0x94a3b8, majorEvery=8){
   const half = (studs * pitch) / 2;
   const minorVerts = [];
@@ -127,9 +131,8 @@ function makeStudEdgeGrid(studs, pitch, minorColor=0xe3e7ee, majorColor=0x94a3b8
   for(let j=0; j<=studs; j++){
     const p = -half + j*pitch;
     const tgt = (j % majorEvery === 0) ? majorVerts : minorVerts;
-    // x = p (vertical), z = p (horizontal)
-    tgt.push(p,0,-half, p,0, half);
-    tgt.push(-half,0,p, half,0, p);
+    tgt.push(p,0,-half, p,0, half);  // vertical
+    tgt.push(-half,0,p, half,0, p);  // horizontal
   }
   const group = new THREE.Group();
   if(minorVerts.length){
@@ -150,7 +153,7 @@ function makeStudEdgeGrid(studs, pitch, minorColor=0xe3e7ee, majorColor=0x94a3b8
 }
 baseplate.add(makeStudEdgeGrid(BASE_STUDS, STUD_PITCH));
 
-/* picking plane at top of baseplate */
+/* picking plane */
 const pickPlane=new THREE.Mesh(new THREE.PlaneGeometry(4000,4000),new THREE.MeshBasicMaterial({visible:false}));
 pickPlane.rotateX(-Math.PI/2); pickPlane.position.y=PLATE_HEIGHT; scene.add(pickPlane);
 
@@ -206,12 +209,11 @@ const SECTIONS = [
     { id:'46212', name:'1×2×5 Hollow', studs:[1,2], height:BRICK_HEIGHT*5, hollow:true }
   ]}
 ];
-const CATALOG={};
-for(const sec of SECTIONS) for(const it of sec.items){
+const CATALOG={}; for(const sec of SECTIONS) for(const it of sec.items){
   CATALOG[it.id] = { id:it.id, name:it.name, studs:it.studs, height:it.height, mask:it.mask||'rect', hollow:!!it.hollow, tile:!!it.tile };
 }
 
-/* ===== color sets ===== */
+/* ===== colors ===== */
 const COLOR_SETS = [
   { title:'Plastic (Opaque)', glass:false, items:[
     {name:'White',  hex:0xFFFFFF},
@@ -258,7 +260,7 @@ function renderColorMenu(){
       b.addEventListener('click', ()=>{
         currentColor = { name: it.name, hex: it.hex, glass: set.glass };
         btnColorDot.style.background = '#'+it.hex.toString(16).padStart(6,'0');
-        btnColorLabel.textContent = `${it.name} · ${set.glass? 'Glass':'Plastic'}`;
+        btnColorLabel.textContent = it.name + ' · ' + (set.glass? 'Glass':'Plastic');
         if(ghost){
           const id = sourceKey, turns=quarterTurns, pos=ghost.position.clone();
           ghost.traverse(o=>{ if((o.isMesh||o.isInstancedMesh)&&o.material) o.material.dispose?.(); });
@@ -306,7 +308,7 @@ function renderPartsMenu(){
     sec.items.forEach(it=>{
       const b=document.createElement('button');
       b.className='item';
-      b.innerHTML=`${it.name} <small>${it.id}</small>`;
+      b.innerHTML = it.name + ' <small>' + it.id + '</small>';
       b.addEventListener('click', ()=> startPlacing(it.id));
       body.appendChild(b);
     });
@@ -338,7 +340,7 @@ function matPlastic(hex, opts={}){
   const m = new THREE.MeshPhysicalMaterial({
     color: new THREE.Color(hex),
     roughness: 0.92, metalness: 0.0,
-    clearcoat: 0.0, clearcoatRoughness: 0.25,
+    clearcoat: 0.0, clearcoatRoughness: 0.25
   });
   if(opts.ghost){ m.transparent=true; m.opacity=0.6; }
   if(opts.hollow && !opts.glass){ m.transparent=true; m.opacity = opts.ghost? 0.5 : 0.42; m.depthWrite=true; }
@@ -365,10 +367,13 @@ function makeMaterialFor(part, colorSel, opts={}){
   return base(colorSel?.hex ?? 0x0055BF, { ghost: !!opts.ghost, hollow: part.hollow, glass: colorSel?.glass });
 }
 
-/* ===== geometry helpers ===== */
+/* ===== masks & geometry ===== */
 function buildMask(sx, sz, mode){
   const mask = Array.from({length:sz}, ()=> Array(sx).fill(true));
   if(mode==='corner'){ for(let z=0; z<sz; z++) for(let x=0; x<sx; x++){ mask[z][x] = (x===0 || z===0); } }
+  else if(mode==='cross' && sx===3 && sz===3){ for(let z=0; z<3; z++) for(let x=0; x<3; x++){ mask[z][x] = (x===1 || z===1); } }
+  else if(mode==='cutout_center_2x2' && sx===4 && sz===4){ for(let z=1; z<=2; z++) for(let x=1; x<=2; x++){ mask[z][x] = false; } }
+  else if(mode==='cutout_corner'){ mask[sz-1][sx-1] = false; }
   return mask;
 }
 function makeBodyGeometryRect(sx, sz, h){
@@ -409,21 +414,33 @@ function addDomedStuds(body, sx, sz, h, mat, mask){
   body.add(core,lip,dome);
 }
 
-/* ===== part factory ===== */
-function makePartMesh(partId, colorSel, opts={}){
-  const p = CATALOG[partId]; if(!p) return new THREE.Mesh();
+/* ===== part factory (honors passed color for load) ===== */
+function makePartMesh(partId, colorSel = currentColor, opts = {}) {
+  const p = CATALOG[partId]; if (!p) return new THREE.Mesh();
   const [sx,sz]=p.studs, h=p.height;
   const mask = buildMask(sx, sz, p.mask);
-  const mat = makeMaterialFor(p, currentColor, { ghost: !!opts.ghost });
+  const colObj = (colorSel && typeof colorSel === 'object' && 'hex' in colorSel)
+    ? colorSel
+    : { hex: (typeof colorSel === 'number' ? colorSel : currentColor.hex), glass: !!currentColor.glass };
+  const mat = makeMaterialFor(p, colObj, { ghost: !!opts.ghost });
   const geo = (p.mask!=='rect') ? makeBodyGeometryMasked(sx,sz,h,mask) : makeBodyGeometryRect(sx,sz,h);
   const body = new THREE.Mesh(geo, mat);
-  body.userData = { id: p.id, studsX:sx, studsZ:sz, height:h, maskType:p.mask, tile:p.tile===true, hollow:p.hollow===true };
-  addDomedStuds(body, sx, sz, h, mat, mask);
+  body.userData = {
+    id: p.id,
+    studsX:sx, studsZ:sz,
+    height:h,
+    maskType:p.mask,
+    tile:p.tile===true,
+    hollow:p.hollow===true,
+    colorHex: colObj.hex,
+    glass: !!colObj.glass
+  };
+  if (!p.tile) addDomedStuds(body, sx, sz, h, mat, mask);
   body.geometry.computeBoundingBox();
   return body;
 }
 
-/* ===== selection ===== */
+/* ===== selection (outline) ===== */
 let selected=null, outline=null;
 const outlineMat = new THREE.LineBasicMaterial({ color: 0x2563EB });
 function clearSelection(){
@@ -439,17 +456,13 @@ function selectMesh(m){
 }
 function syncOutline(){ if(!selected||!outline) return; outline.position.copy(selected.position); outline.rotation.copy(selected.rotation); }
 
-/* ===== placement: snap edges to grid lines ===== */
+/* ===== placement: stud-locked (edges snap to grid lines) ===== */
 const ray=new THREE.Raycaster(); const mouse=new THREE.Vector2();
 let ghost=null, sourceKey=null, quarterTurns=0;
 const hint=document.getElementById('hint');
-
 const snapEdge = v => Math.round(v / STUD_PITCH) * STUD_PITCH;
 
-/* returns oriented stud size after rotation (so we snap the correct edges) */
-function orientedStuds(turns, sx, sz){
-  return (turns & 1) ? { sx: sz, sz: sx } : { sx, sz };
-}
+function orientedStuds(turns, sx, sz){ return (turns & 1) ? { sx: sz, sz: sx } : { sx, sz }; }
 
 function bodyBoxWorld(mesh){
   mesh.updateWorldMatrix(true,false);
@@ -508,20 +521,16 @@ window.addEventListener('mousemove',(e)=>{
 
   let cx=0, cz=0, cy=0;
 
-  // stack on top surfaces
   const hits=ray.intersectObjects(modelRoot.children,true);
   if(hits.length){
     let m = hits[0].object; while(m && (!m.isMesh || !m.userData?.height)) m = m.parent;
     if(m){
       const p = hits[0].point;
-      // snap LEFT and FRONT edges to nearest grid, then restore center
       cx = snapEdge(p.x - halfX) + halfX;
       cz = snapEdge(p.z - halfZ) + halfZ;
       cy = bodyBoxWorld(m).max.y + h/2 + EPS;
     }
   }
-
-  // baseplate snap
   if(cy===0){
     const g=ray.intersectObject(pickPlane,false)[0];
     if(g){
@@ -543,7 +552,6 @@ window.addEventListener('keydown',(e)=>{
 });
 
 window.addEventListener('mousedown',(e)=>{
-  // place (keep ghost active)
   if(ghost && e.button===0){
     if(!collides(ghost)){
       const real=makePartMesh(sourceKey, currentColor);
@@ -553,7 +561,6 @@ window.addEventListener('mousedown',(e)=>{
     }
     return;
   }
-  // select
   if(!ghost && e.button===0){
     const rect=renderer.domElement.getBoundingClientRect();
     const x=((e.clientX-rect.left)/rect.width)*2-1, y=-((e.clientY-rect.top)/rect.height)*2+1;
@@ -566,7 +573,63 @@ window.addEventListener('mousedown',(e)=>{
   }
 });
 
-/* ===== render loop ===== */
+/* ===== Save/Load ===== */
+function downloadJSON(filename, obj) {
+  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+function snapOf(mesh) {
+  return {
+    id: mesh.userData.id,
+    position: mesh.position.toArray(),
+    rotation: [mesh.rotation.x, mesh.rotation.y, mesh.rotation.z],
+    colorHex: mesh.userData.colorHex ?? (mesh.material?.color?.getHex?.() ?? null),
+    glass: !!mesh.userData.glass
+  };
+}
+function serializeBuild() {
+  const parts = modelRoot.children
+    .filter(o => o.isMesh && o.userData?.id)
+    .map(snapOf);
+  return { parts };
+}
+function loadBuild(data) {
+  [...modelRoot.children].forEach(c => modelRoot.remove(c));
+  clearSelection();
+  for (const p of (data?.parts || [])) {
+    const colorObj = (typeof p.colorHex === 'number')
+      ? { hex: p.colorHex, glass: !!p.glass }
+      : (typeof p.color === 'number' ? { hex: p.color, glass: !!p.glass } : currentColor);
+    const m = makePartMesh(p.id, colorObj);
+    if (Array.isArray(p.position)) m.position.fromArray(p.position);
+    if (Array.isArray(p.rotation)) m.rotation.set(...p.rotation);
+    modelRoot.add(m);
+  }
+}
+document.getElementById('btnSave').addEventListener('click', () => {
+  const data = serializeBuild();
+  downloadJSON('build.json', data);
+});
+const fileIn = document.getElementById('fileIn');
+document.getElementById('btnLoad').addEventListener('click', () => fileIn.click());
+fileIn.addEventListener('change', async () => {
+  const f = fileIn.files?.[0];
+  if (!f) return;
+  try {
+    const json = JSON.parse(await f.text());
+    loadBuild(json);
+  } catch {
+    alert('Invalid JSON file');
+  } finally {
+    fileIn.value = '';
+  }
+});
+
+/* ===== loop ===== */
 function resize(){ const w=renderer.domElement.clientWidth, h=renderer.domElement.clientHeight; renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); syncOutline(); }
 renderer.setAnimationLoop(()=>{ controls.update(); resize(); renderer.render(scene,camera); });
 </script>
