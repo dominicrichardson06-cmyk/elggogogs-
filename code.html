@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>LEGO 3D — Edge-Aligned Grid + Save/Load</title>
+<title>LEGO 3D — Edge-Aligned Grid + Save/Load + Expanded Parts</title>
 <style>
   :root{ --bg:#f5f7fb; --fg:#0b1220; --card:#fff; --line:#e5e7eb; }
   html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
@@ -159,7 +159,7 @@ pickPlane.rotateX(-Math.PI/2); pickPlane.position.y=PLATE_HEIGHT; scene.add(pick
 
 const modelRoot=new THREE.Group(); scene.add(modelRoot);
 
-/* ===== catalog (grouped) ===== */
+/* ===== catalog (grouped, expanded) ===== */
 const SECTIONS = [
   { title: 'Brick › 1× Brick', items: [
     { id:'3005', name:'1×1', studs:[1,1], height:BRICK_HEIGHT },
@@ -181,32 +181,79 @@ const SECTIONS = [
     { id:'3007', name:'2×8', studs:[2,8], height:BRICK_HEIGHT },
     { id:'3006', name:'2×10', studs:[2,10], height:BRICK_HEIGHT }
   ]},
+  { title: 'Brick › Tall Brick', items: [
+    { id:'14716', name:'1×1×3', studs:[1,1], height:BRICK_HEIGHT*3 },
+    { id:'2453',  name:'1×1×5', studs:[1,1], height:BRICK_HEIGHT*5 },
+    { id:'3245',  name:'1×2×2', studs:[1,2], height:BRICK_HEIGHT*2 },
+    { id:'22886', name:'1×2×3', studs:[1,2], height:BRICK_HEIGHT*3 },
+    { id:'2454',  name:'1×2×5', studs:[1,2], height:BRICK_HEIGHT*5 },
+    { id:'30145', name:'2×2×3', studs:[2,2], height:BRICK_HEIGHT*3 },
+    { id:'49311', name:'1×4×3', studs:[1,4], height:BRICK_HEIGHT*3 }
+  ]},
+  { title: 'Brick › Hollow Brick', items: [
+    { id:'3065',  name:'1×2 Hollow',   studs:[1,2], height:BRICK_HEIGHT, hollow:true },
+    { id:'46212', name:'1×2×5 Hollow', studs:[1,2], height:BRICK_HEIGHT*5, hollow:true },
+    { id:'3066',  name:'1×4 Hollow',   studs:[1,4], height:BRICK_HEIGHT, hollow:true }
+  ]},
   { title: 'Plate › 1× Plate', items: [
     { id:'3024', name:'1×1', studs:[1,1], height:PLATE_HEIGHT },
+    { id:'3023', name:'1×2', studs:[1,2], height:PLATE_HEIGHT },
     { id:'3623', name:'1×3', studs:[1,3], height:PLATE_HEIGHT },
     { id:'3710', name:'1×4', studs:[1,4], height:PLATE_HEIGHT },
+    { id:'78329',name:'1×5', studs:[1,5], height:PLATE_HEIGHT },
     { id:'3666', name:'1×6', studs:[1,6], height:PLATE_HEIGHT },
     { id:'3460', name:'1×8', studs:[1,8], height:PLATE_HEIGHT },
     { id:'4477', name:'1×10', studs:[1,10], height:PLATE_HEIGHT },
     { id:'60479',name:'1×12', studs:[1,12], height:PLATE_HEIGHT },
-    { id:'2420', name:'2×2 Corner', studs:[2,2], height:PLATE_HEIGHT, mask:'corner' }
+    { id:'2420', name:'2×2 Corner', studs:[2,2], height:PLATE_HEIGHT, mask:'corner' },
+    { id:'77844',name:'3×3 Corner', studs:[3,3], height:PLATE_HEIGHT, mask:'corner' },
+    { id:'15397',name:'3×3 Cross', studs:[3,3], height:PLATE_HEIGHT, mask:'cross' },
+    { id:'73831',name:'2×3 w/ Cutout', studs:[2,3], height:PLATE_HEIGHT, mask:'cutout_corner' },
+    { id:'64799',name:'4×4 w/ Cutout', studs:[4,4], height:PLATE_HEIGHT, mask:'cutout_center_2x2' }
   ]},
   { title: 'Plate › 2× Plate', items: [
     { id:'3022', name:'2×2', studs:[2,2], height:PLATE_HEIGHT },
     { id:'3021', name:'2×3', studs:[2,3], height:PLATE_HEIGHT },
     { id:'3020', name:'2×4', studs:[2,4], height:PLATE_HEIGHT },
     { id:'3795', name:'2×6', studs:[2,6], height:PLATE_HEIGHT },
-    { id:'3034', name:'2×8', studs:[2,8], height:PLATE_HEIGHT }
+    { id:'3034', name:'2×8', studs:[2,8], height:PLATE_HEIGHT },
+    { id:'3832', name:'2×10', studs:[2,10], height:PLATE_HEIGHT },
+    { id:'2445', name:'2×12', studs:[2,12], height:PLATE_HEIGHT },
+    { id:'91988',name:'2×14', studs:[2,14], height:PLATE_HEIGHT },
+    { id:'4282', name:'2×16', studs:[2,16], height:PLATE_HEIGHT },
+    { id:'2639', name:'4×4 Corner', studs:[4,4], height:PLATE_HEIGHT, mask:'corner_quadrant' }
   ]},
-  { title: 'Tile', items: [
+  { title: 'Plate › Large Plate', items: [
+    { id:'11212',name:'3×3', studs:[3,3], height:PLATE_HEIGHT },
+    { id:'3031', name:'4×4', studs:[4,4], height:PLATE_HEIGHT },
+    { id:'3032', name:'4×6', studs:[4,6], height:PLATE_HEIGHT },
+    { id:'3035', name:'4×8', studs:[4,8], height:PLATE_HEIGHT },
+    { id:'3030', name:'4×10', studs:[4,10], height:PLATE_HEIGHT },
+    { id:'3029', name:'4×12', studs:[4,12], height:PLATE_HEIGHT },
+    { id:'3958', name:'6×6', studs:[6,6], height:PLATE_HEIGHT },
+    { id:'3036', name:'6×8', studs:[6,8], height:PLATE_HEIGHT },
+    { id:'3033', name:'6×10', studs:[6,10], height:PLATE_HEIGHT },
+    { id:'3028', name:'6×12', studs:[6,12], height:PLATE_HEIGHT },
+    { id:'3456', name:'6×14', studs:[6,14], height:PLATE_HEIGHT },
+    { id:'3027', name:'6×16', studs:[6,16], height:PLATE_HEIGHT },
+    { id:'41539',name:'8×8', studs:[8,8], height:PLATE_HEIGHT },
+    { id:'92438',name:'8×16', studs:[8,16], height:PLATE_HEIGHT }
+  ]},
+  { title: 'Tile (no studs on top)', items: [
     { id:'3070',  name:'1×1 Tile', studs:[1,1], height:PLATE_HEIGHT, tile:true },
     { id:'3069',  name:'1×2 Tile', studs:[1,2], height:PLATE_HEIGHT, tile:true },
+    { id:'63864', name:'1×3 Tile', studs:[1,3], height:PLATE_HEIGHT, tile:true },
+    { id:'2431',  name:'1×4 Tile', studs:[1,4], height:PLATE_HEIGHT, tile:true },
+    { id:'6636',  name:'1×6 Tile', studs:[1,6], height:PLATE_HEIGHT, tile:true },
+    { id:'4162',  name:'1×8 Tile', studs:[1,8], height:PLATE_HEIGHT, tile:true },
+    { id:'14719', name:'2×2 Tile, Corner', studs:[2,2], height:PLATE_HEIGHT, tile:true, mask:'corner' },
     { id:'3068',  name:'2×2 Tile', studs:[2,2], height:PLATE_HEIGHT, tile:true },
-    { id:'87079', name:'2×4 Tile', studs:[2,4], height:PLATE_HEIGHT, tile:true }
-  ]},
-  { title: 'Hollow Brick (see-through)', items: [
-    { id:'3065',  name:'1×2 Hollow',   studs:[1,2], height:BRICK_HEIGHT, hollow:true },
-    { id:'46212', name:'1×2×5 Hollow', studs:[1,2], height:BRICK_HEIGHT*5, hollow:true }
+    { id:'26603', name:'2×3 Tile', studs:[2,3], height:PLATE_HEIGHT, tile:true },
+    { id:'87079', name:'2×4 Tile', studs:[2,4], height:PLATE_HEIGHT, tile:true },
+    { id:'69729', name:'2×6 Tile', studs:[2,6], height:PLATE_HEIGHT, tile:true },
+    { id:'1751N', name:'4×4 Tile', studs:[4,4], height:PLATE_HEIGHT, tile:true },
+    { id:'10202', name:'6×6 Tile', studs:[6,6], height:PLATE_HEIGHT, tile:true },
+    { id:'8x16T', name:'8×16 Tile', studs:[8,16], height:PLATE_HEIGHT, tile:true } /* placeholder id for demo */
   ]}
 ];
 const CATALOG={}; for(const sec of SECTIONS) for(const it of sec.items){
@@ -370,10 +417,22 @@ function makeMaterialFor(part, colorSel, opts={}){
 /* ===== masks & geometry ===== */
 function buildMask(sx, sz, mode){
   const mask = Array.from({length:sz}, ()=> Array(sx).fill(true));
-  if(mode==='corner'){ for(let z=0; z<sz; z++) for(let x=0; x<sx; x++){ mask[z][x] = (x===0 || z===0); } }
-  else if(mode==='cross' && sx===3 && sz===3){ for(let z=0; z<3; z++) for(let x=0; x<3; x++){ mask[z][x] = (x===1 || z===1); } }
-  else if(mode==='cutout_center_2x2' && sx===4 && sz===4){ for(let z=1; z<=2; z++) for(let x=1; x<=2; x++){ mask[z][x] = false; } }
-  else if(mode==='cutout_corner'){ mask[sz-1][sx-1] = false; }
+  if(mode==='corner'){ // thin L (1-stud legs)
+    for(let z=0; z<sz; z++) for(let x=0; x<sx; x++){ mask[z][x] = (x===0 || z===0); }
+  }
+  else if(mode==='cross' && sx===3 && sz===3){
+    for(let z=0; z<3; z++) for(let x=0; x<3; x++){ mask[z][x] = (x===1 || z===1); }
+  }
+  else if(mode==='cutout_center_2x2' && sx>=4 && sz>=4){
+    const cx=Math.floor(sx/2)-1, cz=Math.floor(sz/2)-1;
+    for(let z=cz; z<cz+2; z++) for(let x=cx; x<cx+2; x++) mask[z][x]=false;
+  }
+  else if(mode==='cutout_corner'){ // remove 1×1 at (+x,+z) corner
+    mask[sz-1][sx-1] = false;
+  }
+  else if(mode==='corner_quadrant' && sx===4 && sz===4){ // remove a 2×2 quadrant (4×4 Corner plate)
+    for(let z=2; z<4; z++) for(let x=2; x<4; x++) mask[z][x]=false;
+  }
   return mask;
 }
 function makeBodyGeometryRect(sx, sz, h){
@@ -414,7 +473,7 @@ function addDomedStuds(body, sx, sz, h, mat, mask){
   body.add(core,lip,dome);
 }
 
-/* ===== part factory (honors passed color for load) ===== */
+/* ===== part factory ===== */
 function makePartMesh(partId, colorSel = currentColor, opts = {}) {
   const p = CATALOG[partId]; if (!p) return new THREE.Mesh();
   const [sx,sz]=p.studs, h=p.height;
@@ -456,12 +515,11 @@ function selectMesh(m){
 }
 function syncOutline(){ if(!selected||!outline) return; outline.position.copy(selected.position); outline.rotation.copy(selected.rotation); }
 
-/* ===== placement: stud-locked (edges snap to grid lines) ===== */
+/* ===== placement (stud-locked) ===== */
 const ray=new THREE.Raycaster(); const mouse=new THREE.Vector2();
 let ghost=null, sourceKey=null, quarterTurns=0;
 const hint=document.getElementById('hint');
 const snapEdge = v => Math.round(v / STUD_PITCH) * STUD_PITCH;
-
 function orientedStuds(turns, sx, sz){ return (turns & 1) ? { sx: sz, sz: sx } : { sx, sz }; }
 
 function bodyBoxWorld(mesh){
@@ -498,7 +556,6 @@ function setGhostOK(ok){
     }
   });
 }
-
 function startPlacing(key){
   const p=CATALOG[key]; if(!p) return;
   if(ghost){ scene.remove(ghost); ghost=null; }
