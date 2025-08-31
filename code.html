@@ -121,7 +121,7 @@ const plate=new THREE.Mesh(
 );
 plate.position.y=PLATE_HEIGHT/2; baseplate.add(plate);
 const grid=new THREE.GridHelper(BASE_STUDS*STUD_PITCH,BASE_STUDS,0x8da0b8,0xe3e7ee);
-grid.rotation.x=Math.PI/2; baseplate.add(grid);
+baseplate.add(grid);
 
 const pickPlane=new THREE.Mesh(new THREE.PlaneGeometry(4000,4000),new THREE.MeshBasicMaterial({visible:false}));
 pickPlane.rotateX(-Math.PI/2); pickPlane.position.y=PLATE_HEIGHT; scene.add(pickPlane);
@@ -626,3 +626,4 @@ renderer.setAnimationLoop(()=>{ controls.update(); resize(); renderer.render(sce
 </script>
 </body>
 </html>
+
